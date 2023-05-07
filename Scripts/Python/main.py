@@ -7,6 +7,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg#, NavigationTool
 import tkinter as tk
 import pandas as pd
 import datetime
+from git import Repo
 
 ###########################################################################################################################################################
 #------------------------------------------------------------------ GLOBAL VARIABLES ---------------------------------------------------------------------#
@@ -24,6 +25,8 @@ COM_PORT = 'COM5'
 BAUD_RATE = 115200
 TIMEOUT = 0.1
 
+# Git settings and data
+REPOSITORY_PATH = 'C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Projekt'
 
 class Arduino_SCD30():
     def __init__(self, iCom_port, iBaud_rate = 115200, iTimeout = 4):
@@ -253,6 +256,14 @@ class Application():
         self.shutdown = False
         self.exported = True
 
+    def save_file_to_Github(self, file_path, commit_message=''):
+        repo = Repo(REPOSITORY_PATH)
+        #file_path = REPOSITORY_PATH + '\\' + relative_file_path
+        repo.index.add(file_path)
+        repo.index.commit(commit_message)
+        origin = repo.remote('origin')
+        origin.push()
+
     def result_log(self, result):
         self.result_display.config(state=tk.NORMAL)
         self.result_display.delete(0,11)
@@ -372,10 +383,10 @@ class Application():
         # get the inputted path and name of file
         path = self.path_entry.get()
         filename = self.filename_entry.get()
-        if path[-1] == '/':
+        if path[-1] == '\\':
             filepath =  path + filename
         else:
-            filepath =  path + '/' + filename
+            filepath =  path + '\\' + filename
         # convert sensory and time data into a pandas dataframe and save it as a csv to the filepath
         sensory_data = np.array(self.SCD30.data).astype('float').round(2)
         time_data = np.array(self.SCD30.timestamps)#.astype('float').round(2)
@@ -385,6 +396,8 @@ class Application():
             # save data locally to a csv
             data_DF.to_csv(filepath, header=['time stamp [date h:m:s]', 'CO2 concentration [ppm]', 'Temperature [°C]', 'Relative humidity [%]'],
                            index=False)
+            commit_message = 'meritve dne: ' + str(datetime.datetime.now().date())
+            self.save_file_to_Github(filepath,commit_message=commit_message)
             # set the dirty flag for data being exported
             self.exported = True
         except OSError:
