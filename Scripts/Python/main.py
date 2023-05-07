@@ -262,7 +262,7 @@ class Application():
         repo.index.add(file_path)
         repo.index.commit(commit_message)
         origin = repo.remote('origin')
-        origin.push()
+        origin.push('main')
 
     def result_log(self, result):
         self.result_display.config(state=tk.NORMAL)
