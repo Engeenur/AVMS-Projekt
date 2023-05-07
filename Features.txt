@@ -31,7 +31,7 @@ autoscale - DONE
 
 
 WINDOW LOOK:
-Graphs top left (scaled to window scale - 2/3 of frame width and 3/4 of frame height)
+Graphs top right (scaled to window scale - 2/3 of frame width and 3/4 of frame height)
 Next to each graph a time scale input box, displayed average value and running average value, 
 drop down for picking data  
 
