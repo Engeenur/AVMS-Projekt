@@ -3,11 +3,13 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg#, NavigationToolbar2Tk
+# , NavigationToolbar2Tk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import tkinter as tk
 import pandas as pd
 import datetime
 from git import Repo
+
 
 ###########################################################################################################################################################
 #------------------------------------------------------------------ GLOBAL VARIABLES ---------------------------------------------------------------------#
@@ -17,26 +19,28 @@ from git import Repo
 APP_NAME = 'AVMS - MERILEC USPEŠNOSTI KONCERTA'
 BUTTON_WIDTH = 10
 BUTTON_HEIGHT = 2
-APP_WINDOW_HEIGHT = 1060
-APP_WINDOW_WIDTH = 960
+APP_WINDOW_HEIGHT = 1380
+APP_WINDOW_WIDTH = 2000
+BORDER_WIDTH = 70  # number of pixels that are empty around the border of the app window to account for taskbar position
 
 # Arduino connection settings
 COM_PORT = 'COM5'
 BAUD_RATE = 115200
-TIMEOUT = 0.1
+TIMEOUT = 2e-5
 
 # Git settings and data
 REPOSITORY_PATH = 'C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Projekt'
 
+
 class Arduino_SCD30():
-    def __init__(self, iCom_port, iBaud_rate = 115200, iTimeout = 4):
+    def __init__(self, iCom_port, iBaud_rate=115200, iTimeout=4):
         # Create variables for serial communication
         self.baud_rate = iBaud_rate
         self.com_port = iCom_port
         self.timeout = iTimeout
         self.t0 = 0
 
-        # Create data list for measurements 
+        # Create data list for measurements
         # Inside list the formatting is [CO2_concentration,Temperature,Relative_humidity] for each element
         self.data = []
         self.time_data = []
@@ -44,7 +48,7 @@ class Arduino_SCD30():
 
         # create serial connection object
         self.serial = serial.Serial()
-        
+
     def start_serial(self):
         # Start the serial connection and wait for 2 seconds for it to establish
         self.serial.baudrate = self.baud_rate
@@ -52,10 +56,10 @@ class Arduino_SCD30():
         self.serial.timeout = self.timeout
         self.serial.open()
         time.sleep(2)
-        self.t0 =time.time()
+        self.t0 = time.time()
 
     def read_data(self):
-        # read current data on the serial connection (from the arduino) and unpack it into the 
+        # read current data on the serial connection (from the arduino) and unpack it into the
         # SCD30_data list
         line = self.serial.readline()   # read a byte string
         if line:
@@ -64,134 +68,171 @@ class Arduino_SCD30():
             string = line.decode()  # convert the byte string to a unicode string
             new_data = string.split()
             self.data.append(new_data)
-        
+
     def close_serial(self):
         self.serial.close()
 
     def change_sample_time(self):
         pass
-        
+
+class Microphone():
+    # TODO: create a usable microphone class, that you can use to get microphone data
+    def __init__(self):
+        self.data = []
+        self.time_data = []
+        self.t0 = time.time()
+
+    def read_data(self):
+        self.data.append(0)
+        self.time_data.append(time.time()-self.t0)
+
 class Plotter():
     def __init__(self, iTkMaster, iFig_width=5, iFig_height=5, iSubplots_vertical=1, iSubplots_horizontal=1, iDpi=100):
         # create figure for the subplots
-        self.fig = Figure(figsize=(iFig_width/iDpi,iFig_height/iDpi), dpi=iDpi)
+        self.fig = Figure(
+            figsize=(iFig_width/iDpi, iFig_height/iDpi), dpi=iDpi)
         # create a list of subplots
         self.subplots = []
 
         # create subplots
         for i in range(iSubplots_vertical*iSubplots_horizontal):
-            subplot_pos = int(str(iSubplots_vertical) + str(iSubplots_horizontal) + str(i+1))
+            subplot_pos = int(str(iSubplots_vertical) +
+                              str(iSubplots_horizontal) + str(i+1))
             self.subplots.append(self.fig.add_subplot(subplot_pos))
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=iTkMaster)
         self.canvas.draw()
         self.canvas.get_tk_widget().pack()
-        self.canvas.get_tk_widget().place(x=(iFig_width*6/5-iFig_width),y=0)
+        self.canvas.get_tk_widget().place(x=(iFig_width/22), y=-(iFig_height)*0.06)
 
     def subplot_plot(self, iX, iY, iSampleTime=1.5, iAutoScale=1, iY_offset=0, iYscale=100, iX_lower_limit=0, iXscale=100, iTitle='', iMarker='b-', iSubplot_num=0, iXlabel='', iYlable=''):
         iX = np.array(iX)
         iY = np.array(iY)
-        
+
         self.subplots[iSubplot_num].clear()
         self.subplots[iSubplot_num].set_title(iTitle)
-        self.subplots[iSubplot_num].title.set_size(8)
+        self.subplots[iSubplot_num].title.set_size(13)
         self.subplots[iSubplot_num].grid()
         self.subplots[iSubplot_num].set_xlabel(iXlabel)
-        self.subplots[iSubplot_num].set_xlim(iX_lower_limit,iX_lower_limit+iXscale)
+        self.subplots[iSubplot_num].set_xlim(
+            iX_lower_limit, iX_lower_limit+iXscale)
         self.subplots[iSubplot_num].set_ylabel(iYlable)
         if iAutoScale == 0:
             # set scale to specified values only if autoscale not selected
-            self.subplots[iSubplot_num].set_ylim(iY_offset-iYscale/2,iY_offset+iYscale/2)
+            self.subplots[iSubplot_num].set_ylim(
+                iY_offset-iYscale/2, iY_offset+iYscale/2)
         else:
             # if autoscale on, set y scale so that the shown data is maximized
-            low_idx = int(iX_lower_limit/iSampleTime) # calculate idx of the first shown element based on the x scale
-            if low_idx >=1 :
+            # calculate idx of the first shown element based on the x scale
+            low_idx = int(iX_lower_limit/iSampleTime)
+            if low_idx >= 1:
                 low_idx -= 1
             low_limit = np.min(iY[low_idx:])
             high_limit = np.max(iY[low_idx:])
             limit_range = high_limit-low_limit
-            self.subplots[iSubplot_num].set_ylim(low_limit-limit_range*0.05,high_limit+limit_range*0.05)
-        self.subplots[iSubplot_num].plot(iX,iY,iMarker)
+            self.subplots[iSubplot_num].set_ylim(
+                low_limit-limit_range*0.05, high_limit+limit_range*0.05)
+        self.subplots[iSubplot_num].plot(iX, iY, iMarker)
 
         self.canvas.draw()
 
+
 class Application():
-    def __init__(self, iApp_name, iArduino_COM_port, iWindow_width=960, iWindow_height=960, iButton_width=10, iButton_height=2,
-                 iBaud_rate=115200, iTimeout=4):
+    def __init__(self, iApp_name, iArduino_COM_port, iBaud_rate=115200, iTimeout=4):
 
         # create root and name it
         self.root = tk.Tk()
+
+        #Window_width = self.root.winfo_screenwidth()
+        #Window_height = self.root.winfo_screenheight()
+        Window_width = 1920
+        Window_height = 1080
+        Button_width = int(np.ceil(Window_width/200))
+        Button_height = int(np.floor(Window_height/500))
         self.root.title(iApp_name)
 
         # create main frame of the specified dimensions for all the widgets
-        self.main_frame = tk.Frame(self.root,width=iWindow_width, height=iWindow_height, bg='white')
+        self.main_frame = tk.Frame(
+            self.root, width=Window_width, height=Window_height, bg='white')
         self.main_frame.pack()
-        
+
         ########################################################################################
         # GUI elements
 
-        self.plot_height = (iWindow_height*7/8/3)
-        self.plot_width = (iWindow_width*5/6)
+        self.plot_height = (Window_height*7/8/2)
+        self.plot_width = (Window_width*10/11/2)
         # create plot canvas and place it on the specified position
-        self.plotter = Plotter(iTkMaster=self.main_frame, iFig_width=self.plot_width, 
-                               iFig_height=self.plot_height*3, iSubplots_vertical=3)
+        self.plotter = Plotter(iTkMaster=self.main_frame, iFig_width=self.plot_width*2,
+                               iFig_height=self.plot_height*2, iSubplots_vertical=2, iSubplots_horizontal=2)
 
         # create start button
-        self.start_button = tk.Button(self.main_frame, text="Start", width=iButton_width, 
-                                      height=iButton_height, command=self.start_measurement, 
-                                      bg='green',fg='white',activebackground='#0be646',
+        self.start_button = tk.Button(self.main_frame, text="Start", width=Button_width,
+                                      height=Button_height, command=self.start_measurement,
+                                      bg='green', fg='white', activebackground='#0be646',
                                       activeforeground='white')
         self.start_button.pack()
-        self.start_button.place(x=20, y=iWindow_height-50)
+        self.start_button.place(
+            x=BORDER_WIDTH, y=Window_height-(BORDER_WIDTH + Button_height*10))
 
         # create stop button
-        self.stop_button = tk.Button(self.main_frame, text="Stop", width=iButton_width, 
-                                     height=iButton_height, command=self.stop_measurement,
-                                     bg='#b30802',fg='white',activebackground='#f50b02',
+        self.stop_button = tk.Button(self.main_frame, text="Stop", width=Button_width,
+                                     height=Button_height, command=self.stop_measurement,
+                                     bg='#b30802', fg='white', activebackground='#f50b02',
                                      activeforeground='white')
         self.stop_button.pack()
-        self.stop_button.place(x=120, y=iWindow_height-50)
+        self.stop_button.place(x=(BORDER_WIDTH + Button_width*8 + 20),
+                               y=Window_height-(BORDER_WIDTH + Button_height*10))
         self.stop_button['state'] = tk.DISABLED
 
         # create exit button
-        self.exit_button = tk.Button(self.main_frame, text="Izhod", width=iButton_width,
-                                     height=iButton_height, command=self.safe_exit)
+        self.exit_button = tk.Button(self.main_frame, text="Izhod", width=Button_width,
+                                     height=Button_height, command=self.safe_exit)
         self.exit_button.pack()
-        self.exit_button.place(x=iWindow_width-100, y=iWindow_height-50)
+        self.exit_button.place(x=Window_width-(BORDER_WIDTH + Button_width*8),
+                               y=Window_height-(BORDER_WIDTH + Button_height*10))
 
         # create export button
         self.export_button = tk.Button(self.main_frame, text="Izvozi\npodatke", justify=tk.CENTER,
-                                       width=iButton_width, height=iButton_height, command=self.export_data_popup)
+                                       width=Button_width, height=Button_height, command=self.export_data_popup)
         self.export_button.pack()
-        self.export_button.place(x=iWindow_width-200, y=iWindow_height-50)
+        self.export_button.place(x=Window_width-(BORDER_WIDTH + Button_width *
+                                 8*2 + 20), y=Window_height-(BORDER_WIDTH + Button_height*10))
 
         # make time label at the bottom of the graphs
         self.time_label = tk.Label(self.main_frame, text='Čas [s]',
-                        justify=tk.CENTER)
+                                   justify=tk.CENTER)
         self.time_label.pack()
-        self.time_label.place(x=iWindow_width - self.plot_width/2 - 10,y=self.plot_height*3 - 80)
+        self.time_label.place(
+            x=Window_width/2, y=Window_height-self.plot_height*2/7-self.plot_height*0.22)
 
         # current state logger (disabled entry so it's still a box, but can't be written in)
-        self.state_logger = tk.Entry(self.main_frame, width=60, font='Arial 15')
+        self.state_logger = tk.Entry(
+            self.main_frame, width=60, font='Arial 15')
         self.state_logger.pack()
-        self.state_logger.place(x=20,y=iWindow_height-150)
+        self.state_logger.place(x=BORDER_WIDTH, y=Window_height-150)
         self.state_logger.config(state=tk.DISABLED)
-        self.state_logger_label = tk.Label(self.main_frame,text='Trenutno stanje:')
+        self.state_logger_label = tk.Label(
+            self.main_frame, text='Trenutno stanje:')
         self.state_logger_label.pack()
-        self.state_logger_label.place(x=20,y=iWindow_height-175)
+        self.state_logger_label.place(x=BORDER_WIDTH, y=Window_height-175)
 
         # end of measurement result display
-        self.result_display = tk.Entry(self.main_frame, font='Arial 20', width=10)
+        self.result_display = tk.Entry(
+            self.main_frame, font='Arial 20', width=10)
         self.result_display.pack()
-        self.result_display.place(x=iWindow_width-200, y=iWindow_height-150)
+        self.result_display.place(
+            x=Window_width-BORDER_WIDTH-153, y=Window_height-150)
         self.result_display.config(state=tk.DISABLED)
-        self.result_display_label = tk.Label(self.main_frame, text='Rezultat meritve:', font='Arial 15')
+        self.result_display_label = tk.Label(
+            self.main_frame, text='Rezultat meritve:', font='Arial 15')
         self.result_display_label.pack()
-        self.result_display_label.place(x=iWindow_width-200, y=iWindow_height-180)
+        self.result_display_label.place(
+            x=Window_width-BORDER_WIDTH-153, y=Window_height-180)
 
         ############################################## GRAPH WIDGETS ###################################################
         self.graphs_data_to_plot = []
-        self.graphs_data_to_plot_options = ['CO2', 'Temp', 'Vlažnost']
+        self.graphs_data_to_plot_options = [
+            'CO2', 'Temp', 'Vlažnost', 'Mikrofon']
         self.graph_time_scale_sliders = []
         self.graph_amp_scale_sliders = []
         self.graph_amp_offs_entries = []
@@ -199,56 +240,142 @@ class Application():
         self.graph_amp_scale_labels = []
         self.graph_amp_offs_labels = []
         for i in range(len(self.plotter.subplots)):
-            # drop down menu
-            clicked = tk.StringVar()
-            dropdown = tk.OptionMenu(self.main_frame,clicked,*self.graphs_data_to_plot_options)
-            dropdown.pack()
-            dropdown.place(x=(iWindow_width-self.plot_width-135),y=(i*self.plot_height + self.plot_height/4 - i*iWindow_height/32 + 8))
-            self.graphs_data_to_plot.append(clicked)
+            x_subplot_idx = i % 2
+            y_subplot_idx = i//2
+            plot_h = self.plot_height*0.85
 
-            # time scale slider
-            time_scale_slider = tk.Scale(self.main_frame,from_=30, to=180, resolution=10, length=125, orient=tk.HORIZONTAL)
-            time_scale_slider.set(60)
-            time_scale_slider.pack()
-            time_scale_slider.place(x=(iWindow_width-self.plot_width-135),y=(i*self.plot_height + self.plot_height/4 - i*iWindow_height/32 + 55))
-            self.graph_time_scale_sliders.append(time_scale_slider)
-            time_scale_label = tk.Label(self.main_frame, text='Časovna skala [s]')
-            time_scale_label.pack()
-            time_scale_label.place(x=(iWindow_width-self.plot_width-135),y=(i*self.plot_height + self.plot_height/4 - i*iWindow_height/32 + 40))
+            if x_subplot_idx == 0:
+                # LEFT TWO SUBPLOTS
+                # drop down menu
+                clicked = tk.StringVar()
+                dropdown = tk.OptionMenu(
+                    self.main_frame, clicked, *self.graphs_data_to_plot_options)
+                dropdown.pack()
+                dropdown.place(x=(BORDER_WIDTH), y=(
+                    y_subplot_idx*plot_h + BORDER_WIDTH))
+                self.graphs_data_to_plot.append(clicked)
 
-            # amplitude scale slider
-            amp_scale_slider = tk.Scale(self.main_frame,from_=30, to=180, resolution=10, length=125, orient=tk.HORIZONTAL)
-            amp_scale_slider.set(60)
-            amp_scale_slider.pack()
-            amp_scale_slider.place(x=(iWindow_width-self.plot_width-135),y=(i*self.plot_height + self.plot_height/4 - i*iWindow_height/32 + 115))
-            self.graph_amp_scale_sliders.append(amp_scale_slider)
-            amp_scale_label = tk.Label(self.main_frame, text='Amplitudna skala')
-            amp_scale_label.pack()
-            amp_scale_label.place(x=(iWindow_width-self.plot_width-135),y=(i*self.plot_height + self.plot_height/4 - i*iWindow_height/32 + 100))            
-            self.graph_amp_scale_labels.append(amp_scale_label)
+                # time scale slider
+                time_scale_slider = tk.Scale(
+                    self.main_frame, from_=30, to=180, resolution=10, length=125, orient=tk.HORIZONTAL)
+                time_scale_slider.set(60)
+                time_scale_slider.pack()
+                time_scale_slider.place(x=(BORDER_WIDTH), y=(
+                    y_subplot_idx*plot_h + BORDER_WIDTH + 47))
+                self.graph_time_scale_sliders.append(time_scale_slider)
+                time_scale_label = tk.Label(
+                    self.main_frame, text='Časovna skala [s]')
+                time_scale_label.pack()
+                time_scale_label.place(x=(BORDER_WIDTH), y=(
+                    y_subplot_idx*plot_h + BORDER_WIDTH + 32))
 
-            # amplitude offset entry
-            amp_offs_slider = tk.Entry(self.main_frame,width=5)
-            amp_offs_slider.insert(0,'60')
-            amp_offs_slider.pack()
-            amp_offs_slider.place(x=(iWindow_width-self.plot_width-45),y=(i*self.plot_height + self.plot_height/4 - i*iWindow_height/32 + 170))
-            self.graph_amp_offs_entries.append(amp_offs_slider)
-            amp_offs_label = tk.Label(self.main_frame, text='Amplitudni\npremik', justify=tk.LEFT)
-            amp_offs_label.pack()
-            amp_offs_label.place(x=(iWindow_width-self.plot_width-135),y=(i*self.plot_height + self.plot_height/4 - i*iWindow_height/32 + 160))            
-            self.graph_amp_offs_labels.append(amp_offs_label)
+                # amplitude scale slider
+                amp_scale_slider = tk.Scale(
+                    self.main_frame, from_=30, to=180, resolution=10, length=125, orient=tk.HORIZONTAL)
+                amp_scale_slider.set(60)
+                amp_scale_slider.pack()
+                amp_scale_slider.place(x=(BORDER_WIDTH), y=(
+                    y_subplot_idx*plot_h + BORDER_WIDTH + 107))
+                self.graph_amp_scale_sliders.append(amp_scale_slider)
+                amp_scale_label = tk.Label(
+                    self.main_frame, text='Amplitudna skala')
+                amp_scale_label.pack()
+                amp_scale_label.place(x=(BORDER_WIDTH), y=(
+                    y_subplot_idx*plot_h + BORDER_WIDTH + 92))
+                self.graph_amp_scale_labels.append(amp_scale_label)
 
-            # auto scale amplitude check box
-            amp_autoscale_var = tk.IntVar(self.main_frame)
-            self.graph_amp_autoscale.append(amp_autoscale_var)
-            amp_auto_scale_cehckbox = tk.Checkbutton(self.main_frame, text='Amplituda autoscale', variable=amp_autoscale_var,height=1,width=15)
-            amp_auto_scale_cehckbox.pack()
-            amp_auto_scale_cehckbox.select() # check the box
-            amp_auto_scale_cehckbox.place(x=(iWindow_width-self.plot_width-135),y=(i*self.plot_height + self.plot_height/4 - i*iWindow_height/32 + 200))
+                # amplitude offset entry
+                amp_offs_slider = tk.Entry(self.main_frame, width=5)
+                amp_offs_slider.insert(0, '60')
+                amp_offs_slider.pack()
+                amp_offs_slider.place(
+                    x=(BORDER_WIDTH+90), y=(y_subplot_idx*plot_h + BORDER_WIDTH + 162))
+                self.graph_amp_offs_entries.append(amp_offs_slider)
+                amp_offs_label = tk.Label(
+                    self.main_frame, text='Amplitudni\npremik', justify=tk.LEFT)
+                amp_offs_label.pack()
+                amp_offs_label.place(x=(BORDER_WIDTH), y=(
+                    y_subplot_idx*plot_h + BORDER_WIDTH + 152))
+                self.graph_amp_offs_labels.append(amp_offs_label)
+
+                # auto scale amplitude check box
+                amp_autoscale_var = tk.IntVar(self.main_frame)
+                self.graph_amp_autoscale.append(amp_autoscale_var)
+                amp_auto_scale_cehckbox = tk.Checkbutton(
+                    self.main_frame, text='Amplituda autoscale', variable=amp_autoscale_var, height=1, width=15)
+                amp_auto_scale_cehckbox.pack()
+                amp_auto_scale_cehckbox.select()  # check the box
+                amp_auto_scale_cehckbox.place(x=(BORDER_WIDTH), y=(
+                    y_subplot_idx*plot_h + BORDER_WIDTH + 192))
+            else:
+                # RIGHT TWO SUBPLOTS
+                # drop down menu
+                clicked = tk.StringVar()
+                dropdown = tk.OptionMenu(
+                    self.main_frame, clicked, *self.graphs_data_to_plot_options)
+                dropdown.pack()
+                dropdown.place(x=(Window_width-BORDER_WIDTH-150),
+                               y=(y_subplot_idx*plot_h + BORDER_WIDTH))
+                self.graphs_data_to_plot.append(clicked)
+
+                # time scale slider
+                time_scale_slider = tk.Scale(
+                    self.main_frame, from_=30, to=180, resolution=10, length=125, orient=tk.HORIZONTAL)
+                time_scale_slider.set(60)
+                time_scale_slider.pack()
+                time_scale_slider.place(
+                    x=(Window_width-BORDER_WIDTH-150), y=(y_subplot_idx*plot_h + BORDER_WIDTH + 47))
+                self.graph_time_scale_sliders.append(time_scale_slider)
+                time_scale_label = tk.Label(
+                    self.main_frame, text='Časovna skala [s]')
+                time_scale_label.pack()
+                time_scale_label.place(
+                    x=(Window_width-BORDER_WIDTH-150), y=(y_subplot_idx*plot_h + BORDER_WIDTH + 32))
+
+                # amplitude scale slider
+                amp_scale_slider = tk.Scale(
+                    self.main_frame, from_=30, to=180, resolution=10, length=125, orient=tk.HORIZONTAL)
+                amp_scale_slider.set(60)
+                amp_scale_slider.pack()
+                amp_scale_slider.place(
+                    x=(Window_width-BORDER_WIDTH-150), y=(y_subplot_idx*plot_h + BORDER_WIDTH + 107))
+                self.graph_amp_scale_sliders.append(amp_scale_slider)
+                amp_scale_label = tk.Label(
+                    self.main_frame, text='Amplitudna skala')
+                amp_scale_label.pack()
+                amp_scale_label.place(
+                    x=(Window_width-BORDER_WIDTH-150), y=(y_subplot_idx*plot_h + BORDER_WIDTH + 92))
+                self.graph_amp_scale_labels.append(amp_scale_label)
+
+                # amplitude offset entry
+                amp_offs_slider = tk.Entry(self.main_frame, width=5)
+                amp_offs_slider.insert(0, '60')
+                amp_offs_slider.pack()
+                amp_offs_slider.place(
+                    x=(Window_width-BORDER_WIDTH-60), y=(y_subplot_idx*plot_h + BORDER_WIDTH + 162))
+                self.graph_amp_offs_entries.append(amp_offs_slider)
+                amp_offs_label = tk.Label(
+                    self.main_frame, text='Amplitudni\npremik', justify=tk.LEFT)
+                amp_offs_label.pack()
+                amp_offs_label.place(
+                    x=(Window_width-BORDER_WIDTH-150), y=(y_subplot_idx*plot_h + BORDER_WIDTH + 152))
+                self.graph_amp_offs_labels.append(amp_offs_label)
+
+                # auto scale amplitude check box
+                amp_autoscale_var = tk.IntVar(self.main_frame)
+                self.graph_amp_autoscale.append(amp_autoscale_var)
+                amp_auto_scale_cehckbox = tk.Checkbutton(
+                    self.main_frame, text='Amplituda autoscale', variable=amp_autoscale_var, height=1, width=15)
+                amp_auto_scale_cehckbox.pack()
+                amp_auto_scale_cehckbox.select()  # check the box
+                amp_auto_scale_cehckbox.place(
+                    x=(Window_width-BORDER_WIDTH-150), y=(y_subplot_idx*plot_h + BORDER_WIDTH + 192))
 
         ########################################################################################
         # Measurement elements
-        self.SCD30 = Arduino_SCD30(iCom_port=iArduino_COM_port, iBaud_rate=iBaud_rate, iTimeout=iTimeout)
+        self.SCD30 = Arduino_SCD30(
+            iCom_port=iArduino_COM_port, iBaud_rate=iBaud_rate, iTimeout=iTimeout)
+        self.Microphone = Microphone()
 
         ########################################################################################
         # Running time variables (and dirty flags)
@@ -262,19 +389,19 @@ class Application():
         repo.index.add(file_path)
         repo.index.commit(commit_message)
         origin = repo.remote('origin')
-        origin.push('main')
+        origin.push()
 
     def result_log(self, result):
         self.result_display.config(state=tk.NORMAL)
-        self.result_display.delete(0,11)
-        self.result_display.insert(0,str(result))
+        self.result_display.delete(0, 11)
+        self.result_display.insert(0, str(result))
         self.result_display.config(state=tk.DISABLED)
         self.root.update()
 
     def state_log(self, message):
         self.state_logger.config(state=tk.NORMAL)
-        self.state_logger.delete(0,101)
-        self.state_logger.insert(0,message)
+        self.state_logger.delete(0, 101)
+        self.state_logger.insert(0, message)
         self.state_logger.config(state=tk.DISABLED)
         self.root.update()
 
@@ -289,22 +416,21 @@ class Application():
         # starting the serial connection if not open already
         if not self.SCD30.serial.is_open:
             self.state_log('Vzpostavljanje povezave s senzorjem SCD30')
-            self.SCD30.start_serial()           
+            self.SCD30.start_serial()
 
         self.state_log('Merjenje...')
         # record starting time
-        self.t0 =time.time()
+        self.t0 = time.time()
         # set the dirty flag for running a measurement and reset it for the exported data
-        self.running_measurement = True        
+        self.running_measurement = True
         self.exported = False
-        
+
     def stop_measurement(self):
         # update visuals and functionality of buttons
         self.update_buttons('stop')
         self.state_log('Zaključek meritev')
         # reset the dirty flag for running a measurement
         self.running_measurement = False
-        
 
     def safe_exit(self):
         # check dirty flag for running a measurement
@@ -312,18 +438,18 @@ class Application():
             # check with the user if they want to save the measured data into a csv file
             if self.exported == False:
                 # inform the user about the not saved data and ask them if they really want to exit
-                self.not_exported_popup =  tk.Toplevel(self.root)
+                self.not_exported_popup = tk.Toplevel(self.root)
                 self.not_exported_popup.geometry('230x120')
                 self.not_exported_popup.title('Neshranjeni podatki')
                 info_text = tk.Label(self.not_exported_popup, text='Podatki zadnje meritve niso bili shranjeni.\n\nAli želite shraniti podatke?',
-                        justify=tk.CENTER)
+                                     justify=tk.CENTER)
                 info_text.pack()
-                self.go_to_export_button = tk.Button(self.not_exported_popup, text='Shrani', width=10, 
+                self.go_to_export_button = tk.Button(self.not_exported_popup, text='Shrani', width=10,
                                                      height=2, command=self.go_to_export)
                 self.go_to_export_button.pack()
                 self.go_to_export_button.place(x=20, y=70)
-                self.cancel_export_button = tk.Button(self.not_exported_popup, text='Izhod', width=10, 
-                                                     height=2, command=self.ack_not_saved_data_and_exit)
+                self.cancel_export_button = tk.Button(self.not_exported_popup, text='Izhod', width=10,
+                                                      height=2, command=self.ack_not_saved_data_and_exit)
                 self.cancel_export_button.pack()
                 self.cancel_export_button.place(x=120, y=70)
             else:
@@ -334,7 +460,7 @@ class Application():
         else:
             # make an error popup informing you about a running measurement
             # should not happen because the button is disabled while measuring
-            error_popup =  tk.Toplevel(self.root)
+            error_popup = tk.Toplevel(self.root)
             error_popup.geometry('230x80')
             error_popup.title('Error')
             tk.Label(error_popup, text='Trenutno se izvaja meritev, zato se aplikacija\nne more zapreti.\n\nUstavite meritev in poskusite ponovno.',
@@ -367,13 +493,13 @@ class Application():
         # make entry fields
         self.path_entry = tk.Entry(self.popup)
         self.filename_entry = tk.Entry(self.popup)
-        self.path_entry.grid(row=0,column=1)
-        self.filename_entry.grid(row=1,column=1)
+        self.path_entry.grid(row=0, column=1)
+        self.filename_entry.grid(row=1, column=1)
         # make buttons to confirm saving the data and canceling
-        self.cancel_button = tk.Button(self.popup, text='Prekliči', width=10, 
-                                       height=2, command=self.cancel_export).grid(row=2,column=1)
-        self.save_button = tk.Button(self.popup, text='Shrani', width=10, 
-                                     height=2, command=self.save_data).grid(row=2,column=0)
+        self.cancel_button = tk.Button(self.popup, text='Prekliči', width=10,
+                                       height=2, command=self.cancel_export).grid(row=2, column=1)
+        self.save_button = tk.Button(self.popup, text='Shrani', width=10,
+                                     height=2, command=self.save_data).grid(row=2, column=0)
 
     def cancel_export(self):
         # close the popup window
@@ -384,31 +510,33 @@ class Application():
         path = self.path_entry.get()
         filename = self.filename_entry.get()
         if path[-1] == '\\':
-            filepath =  path + filename
+            filepath = path + filename
         else:
-            filepath =  path + '\\' + filename
+            filepath = path + '\\' + filename
         # convert sensory and time data into a pandas dataframe and save it as a csv to the filepath
         sensory_data = np.array(self.SCD30.data).astype('float').round(2)
-        time_data = np.array(self.SCD30.timestamps)#.astype('float').round(2)
-        time_data = np.reshape(time_data,(time_data.size, 1))
-        data_DF = pd.DataFrame(np.hstack((time_data,sensory_data)))
+        # .astype('float').round(2)
+        time_data = np.array(self.SCD30.timestamps)
+        time_data = np.reshape(time_data, (time_data.size, 1))
+        data_DF = pd.DataFrame(np.hstack((time_data, sensory_data)))
         try:
             # save data locally to a csv
             data_DF.to_csv(filepath, header=['time stamp [date h:m:s]', 'CO2 concentration [ppm]', 'Temperature [°C]', 'Relative humidity [%]'],
                            index=False)
-            commit_message = 'meritve dne: ' + str(datetime.datetime.now().date())
-            self.save_file_to_Github(filepath,commit_message=commit_message)
+            commit_message = 'meritve dne: ' + \
+                str(datetime.datetime.now().date())
+            self.save_file_to_Github(filepath, commit_message=commit_message)
             # set the dirty flag for data being exported
             self.exported = True
         except OSError:
             # invalid entries for path or filename
             # make another popup telling you to try exporting again
-            error_popup =  tk.Toplevel(self.root)
+            error_popup = tk.Toplevel(self.root)
             error_popup.geometry('230x80')
             error_popup.title('Error')
             tk.Label(error_popup, text='Napačen vnos poti do mape shranjevanja\nali imena datoteke.\n\nPoskusite ponovno.',
                      justify=tk.CENTER).grid(row=0)
-        
+
         self.popup.destroy()
 
     def update_buttons(self, button_pressed):
@@ -418,31 +546,35 @@ class Application():
             self.start_button.configure(state=tk.DISABLED)
             self.exit_button.configure(state=tk.DISABLED)
             self.export_button.configure(state=tk.DISABLED)
-            self.start_button.config(bg='#0be646',fg='white')
+            self.start_button.config(bg='#0be646', fg='white')
         elif button_pressed == 'stop':
             # enable start and exit buttons and disable the stop button, also return start button to normal
             self.stop_button.configure(state=tk.DISABLED)
             self.start_button.configure(state=tk.NORMAL)
             self.exit_button.configure(state=tk.NORMAL)
             self.export_button.configure(state=tk.NORMAL)
-            self.start_button.config(bg='green',fg='white')
+            self.start_button.config(bg='green', fg='white')
 
     def mainloop(self):
         while not self.shutdown:
             if self.running_measurement == True:
                 # read the data from the sensor and convert it to an numpy array
-                self.SCD30.read_data()                    
+                self.SCD30.read_data()
+                self.Microphone.read_data()
 
             y_data = np.array(self.SCD30.data).astype('float')
             x_data = np.array(self.SCD30.time_data).astype('float').round(2)
+            # TODO: add microphone data for plotting
+            mic_data = np.array(self.Microphone.data).astype('float')
+            mic_time_data = np.array(self.Microphone.time_data).astype('float')
 
             # plot the last NUM_OF_SAMPLES readings
             if x_data.size > 1:
-                #plot each graph with the desired data
+                # plot each graph with the desired data
                 for i in range(len(self.plotter.subplots)):
                     # calculate correct time and amplitude scale values
                     if self.graph_amp_offs_entries[i].get() != '':
-                        #if the entry box is not empty convert the input to float
+                        # if the entry box is not empty convert the input to float
                         amp_offs = float(self.graph_amp_offs_entries[i].get())
                     else:
                         # else set the offset to 0
@@ -456,51 +588,72 @@ class Application():
                         time0 = 0
                     # calculate average sample time in last 60 samples (or all samples if there are less)
                     if x_data.size < 60:
-                        sample_time = np.sum(x_data)/np.sum(np.arange(1,x_data.size+1))
+                        sample_time = np.sum(
+                            x_data)/np.sum(np.arange(1, x_data.size+1))
                     else:
                         sample_time = (x_data[-1] - x_data[-60])/59
 
-                    #print(sample_time)
-                    
+                    # print(sample_time)
+
                     if self.graphs_data_to_plot[i].get() == self.graphs_data_to_plot_options[0]:
                         # plot CO2 data
-                        self.plotter.subplot_plot(x_data, y_data[:,0].round(2), iX_lower_limit=time0, iXscale=time_scale, 
-                                                   iY_offset=amp_offs, iYscale=amp_scale,iAutoScale=autoscale,iSampleTime=sample_time,
-                                                   iSubplot_num=i, iTitle='Koncentracija CO2', iYlable='CO2 [ppm]')
+                        self.plotter.subplot_plot(x_data, y_data[:, 0].round(2), iX_lower_limit=time0, iXscale=time_scale,
+                                                  iY_offset=amp_offs, iYscale=amp_scale, iAutoScale=autoscale, iSampleTime=sample_time,
+                                                  iSubplot_num=i, iTitle='Koncentracija CO2', iYlable='CO2 [ppm]')
                         # change slider steps and edge values depending on what you are plotting
-                        self.graph_amp_scale_sliders[i].configure(from_=50,to=200)
-                        self.graph_amp_scale_labels[i].configure(text='Amplitudna skala [ppm]')
-                        self.graph_amp_offs_labels[i].configure(text='Amplitudni\npremik [ppm]')
+                        self.graph_amp_scale_sliders[i].configure(
+                            from_=50, to=200)
+                        self.graph_amp_scale_labels[i].configure(
+                            text='Amplitudna skala [ppm]')
+                        self.graph_amp_offs_labels[i].configure(
+                            text='Amplitudni\npremik [ppm]')
                     elif self.graphs_data_to_plot[i].get() == self.graphs_data_to_plot_options[1]:
                         # plot Temperature data
-                        self.plotter.subplot_plot(x_data, y_data[:,1].round(2), iX_lower_limit=time0, iXscale=time_scale, 
-                                                   iY_offset=amp_offs, iYscale=amp_scale,iAutoScale=autoscale,iSampleTime=sample_time,
-                                                   iSubplot_num=i, iTitle='Temperatura', iYlable='T [°C]')
+                        self.plotter.subplot_plot(x_data, y_data[:, 1].round(2), iX_lower_limit=time0, iXscale=time_scale,
+                                                  iY_offset=amp_offs, iYscale=amp_scale, iAutoScale=autoscale, iSampleTime=sample_time,
+                                                  iSubplot_num=i, iTitle='Temperatura', iYlable='T [°C]')
                         # change slider steps and edge values depending on what you are plotting
-                        self.graph_amp_scale_sliders[i].configure(from_=1,to=50,resolution=1)
-                        self.graph_amp_scale_labels[i].configure(text='Amplitudna skala [°C]')
-                        self.graph_amp_offs_labels[i].configure(text='Amplitudni\npremik [°C]')
+                        self.graph_amp_scale_sliders[i].configure(
+                            from_=1, to=50, resolution=1)
+                        self.graph_amp_scale_labels[i].configure(
+                            text='Amplitudna skala [°C]')
+                        self.graph_amp_offs_labels[i].configure(
+                            text='Amplitudni\npremik [°C]')
                     elif self.graphs_data_to_plot[i].get() == self.graphs_data_to_plot_options[2]:
                         # plot Humidity data
-                        self.plotter.subplot_plot(x_data, y_data[:,2].round(1), iX_lower_limit=time0, iXscale=time_scale, 
-                                                   iY_offset=amp_offs, iYscale=amp_scale,iAutoScale=autoscale,iSampleTime=sample_time,
-                                                   iSubplot_num=i, iTitle='Relativna vlažnost', iYlable='H [%]')
+                        self.plotter.subplot_plot(x_data, y_data[:, 2].round(1), iX_lower_limit=time0, iXscale=time_scale,
+                                                  iY_offset=amp_offs, iYscale=amp_scale, iAutoScale=autoscale, iSampleTime=sample_time,
+                                                  iSubplot_num=i, iTitle='Relativna vlažnost', iYlable='H [%]')
                         # change slider steps and edge values depending on what you are plotting
-                        self.graph_amp_scale_sliders[i].configure(from_=1,to=50,resolution=1)
-                        self.graph_amp_scale_labels[i].configure(text='Amplitudna skala [%]')
-                        self.graph_amp_offs_labels[i].configure(text='Amplitudni\npremik [%]')
+                        self.graph_amp_scale_sliders[i].configure(
+                            from_=1, to=50, resolution=1)
+                        self.graph_amp_scale_labels[i].configure(
+                            text='Amplitudna skala [%]')
+                        self.graph_amp_offs_labels[i].configure(
+                            text='Amplitudni\npremik [%]')
+                    elif self.graphs_data_to_plot[i].get() == self.graphs_data_to_plot_options[3]:
+                        # plot Microphone data
+                        self.plotter.subplot_plot(mic_time_data, mic_data, iX_lower_limit=time0, iXscale=time_scale,
+                                                  iY_offset=amp_offs, iYscale=amp_scale, iAutoScale=autoscale, iSampleTime=sample_time,
+                                                  iSubplot_num=i, iTitle='Microphone', iYlable='Microphone []')
+                        # change slider steps and edge values depending on what you are plotting
+                        self.graph_amp_scale_sliders[i].configure(
+                            from_=1, to=50, resolution=1)
+                        self.graph_amp_scale_labels[i].configure(
+                            text='Amplitudna skala []')
+                        self.graph_amp_offs_labels[i].configure(
+                            text='Amplitudni\npremik []')
 
             # print measurement result
+            # TODO: apply the formula for the result
             self.result = 'TODO eq.'
             self.result_log(self.result)
 
             self.root.update()
-        
 
 
 if __name__ == '__main__':
 
-    app = Application(iApp_name=APP_NAME, iWindow_width=APP_WINDOW_WIDTH, iWindow_height=APP_WINDOW_HEIGHT, 
-                      iButton_width=BUTTON_WIDTH, iButton_height=BUTTON_HEIGHT, iArduino_COM_port=COM_PORT, iBaud_rate=BAUD_RATE, 
-                      iTimeout=TIMEOUT)
+    app = Application(iApp_name=APP_NAME, iArduino_COM_port=COM_PORT,
+                      iBaud_rate=BAUD_RATE, iTimeout=TIMEOUT)
     app.mainloop()
