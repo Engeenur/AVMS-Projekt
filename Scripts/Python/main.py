@@ -143,10 +143,10 @@ class Application():
         # create root and name it
         self.root = tk.Tk()
 
-        #Window_width = self.root.winfo_screenwidth()
-        #Window_height = self.root.winfo_screenheight()
-        Window_width = 1920
-        Window_height = 1080
+        Window_width = self.root.winfo_screenwidth()
+        Window_height = self.root.winfo_screenheight() - 20
+        #Window_width = 1920
+        #Window_height = 1080
         Button_width = int(np.ceil(Window_width/200))
         Button_height = int(np.floor(Window_height/500))
         self.root.title(iApp_name)
