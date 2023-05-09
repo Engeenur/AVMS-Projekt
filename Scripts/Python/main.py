@@ -29,7 +29,7 @@ BAUD_RATE = 115200
 TIMEOUT = 2e-5
 
 # Git settings and data
-REPOSITORY_PATH = 'C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Projekt'
+REPOSITORY_PATH = 'C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Meritve'
 
 
 class Arduino_SCD30():
