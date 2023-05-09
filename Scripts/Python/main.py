@@ -3,8 +3,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
-# , NavigationToolbar2Tk
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg# , NavigationToolbar2Tk
 import tkinter as tk
 import pandas as pd
 import datetime
@@ -17,10 +16,6 @@ from git import Repo
 
 # Application settings
 APP_NAME = 'AVMS - MERILEC USPEŠNOSTI KONCERTA'
-BUTTON_WIDTH = 10
-BUTTON_HEIGHT = 2
-APP_WINDOW_HEIGHT = 1380
-APP_WINDOW_WIDTH = 2000
 BORDER_WIDTH = 70  # number of pixels that are empty around the border of the app window to account for taskbar position
 
 # Arduino connection settings
