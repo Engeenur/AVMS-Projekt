@@ -27,7 +27,7 @@ def get_tempo(buffer, sample_rate):
     
     return tempo
 
-if __name__ == '__main__':
+def main():
     samplerate = 44100
     data_buffer = CircularBuffer(shape = (int(samplerate),2), dtype = 'float64')
     data_point = np.empty(shape = data_buffer.data_shape)
@@ -59,6 +59,9 @@ if __name__ == '__main__':
                 i = 0
                 
             i += 1
+
+if __name__ == '__main__':
+    main()
             
             
             
