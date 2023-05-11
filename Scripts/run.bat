@@ -1,0 +1,1 @@
+start python "Python/record_and_send.py"

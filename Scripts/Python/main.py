@@ -8,6 +8,11 @@ import tkinter as tk
 import pandas as pd
 import datetime
 from git import Repo
+from circular_buffer_numpy.circular_buffer import CircularBuffer
+import librosa as lr
+import soundcard as sc
+from pathlib import Path
+import subprocess as sp
 
 
 ###########################################################################################################################################################
@@ -19,12 +24,12 @@ APP_NAME = 'AVMS - MERILEC USPEŠNOSTI KONCERTA'
 BORDER_WIDTH = 70  # number of pixels that are empty around the border of the app window to account for taskbar position
 
 # Arduino connection settings
-COM_PORT = 'COM5'
+COM_PORT = 'COM3'
 BAUD_RATE = 115200
 TIMEOUT = 2e-5
 
 # Git settings and data
-REPOSITORY_PATH = 'C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Meritve'
+REPOSITORY_PATH = 'C:\\Users\\Urban\\Documents\\Fakulteta za Elektrotehniko\\AVMS\\AVMS-Meritve'
 
 
 class Arduino_SCD30():
@@ -76,10 +81,20 @@ class Microphone():
         self.data = []
         self.time_data = []
         self.t0 = time.time()
+        self.microphones = sc.all_microphones()
+        self.rec_mic = self.get_default_mic()
 
     def read_data(self):
         self.data.append(0)
         self.time_data.append(time.time()-self.t0)
+
+    def get_default_mic(self):
+        return self.microphones[0].name
+    
+    def start_measurement(self):
+        pass
+        #sp.call([r'C:\\Users\\Urban\\Documents\\Fakulteta za Elektrotehniko\\AVMS\\AVMS-Projekt\\Scripts\\run.bat'])
+        #print(sp.CalledProcessError.returncode)
 
 class Plotter():
     def __init__(self, iTkMaster, iFig_width=5, iFig_height=5, iSubplots_vertical=1, iSubplots_horizontal=1, iDpi=100):
@@ -139,7 +154,7 @@ class Application():
         self.root = tk.Tk()
 
         Window_width = self.root.winfo_screenwidth()
-        Window_height = self.root.winfo_screenheight() - 20
+        Window_height = self.root.winfo_screenheight() - 30
         #Window_width = 1920
         #Window_height = 1080
         Button_width = int(np.ceil(Window_width/200))
@@ -407,7 +422,9 @@ class Application():
         self.SCD30.data = []
         self.SCD30.time_data = []
         self.SCD30.timestamps = []
+        self.Microphone.data = []
 
+        self.Microphone.start_measurement()
         # starting the serial connection if not open already
         if not self.SCD30.serial.is_open:
             self.state_log('Vzpostavljanje povezave s senzorjem SCD30')

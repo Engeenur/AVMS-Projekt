@@ -31,10 +31,10 @@ if __name__ == '__main__':
     samplerate = 44100
     data_buffer = CircularBuffer(shape = (int(samplerate),2), dtype = 'float64')
     data_point = np.empty(shape = data_buffer.data_shape)
-    recording_mic = sc.get_microphone('Focusrite Usb Audio')
-    # recording_mic = sc.get_microphone('Realtek(R) Audio')
+    # recording_mic = sc.get_microphone('Focusrite Usb Audio')
+    recording_mic = sc.get_microphone('Realtek(R) Audio')
     
-    dir_name = 'data'
+    dir_name = 'C:\\Users\\Urban\\Documents\\Fakulteta za Elektrotehniko\\AVMS\\AVMS-Projekt\\Data'
     
     test = os.listdir(dir_name)
 
@@ -54,7 +54,7 @@ if __name__ == '__main__':
             
             if i == data_buffer.shape[0]:
                 data = data_buffer.get_all()
-                np.save('Data/recorded_data_' + str(file), data, allow_pickle=True)
+                np.save(dir_name+'/recorded_data_' + str(file), data, allow_pickle=True)
                 file += 1
                 i = 0
                 
