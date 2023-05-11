@@ -1,5 +1,5 @@
 import threading
-import main 
+import application as main_app
 from record_and_send import main as mic_main
  
 # Application settings
@@ -14,7 +14,7 @@ TIMEOUT = 2e-5
 # Git settings and data
 REPOSITORY_PATH = 'C:\\Users\\Urban\\Documents\\Fakulteta za Elektrotehniko\\AVMS\\AVMS-Meritve'
 
-class main_thread(threading.Thread):
+class app_thread(threading.Thread):
     def __init__(self, thread_name, thread_ID):
         threading.Thread.__init__(self)
         self.thread_name = thread_name
@@ -22,7 +22,7 @@ class main_thread(threading.Thread):
  
         # helper function to execute the threads
     def run(self):
-        app = main.Application(iApp_name=APP_NAME, iArduino_COM_port=COM_PORT,
+        app = main_app.Application(iApp_name=APP_NAME, iArduino_COM_port=COM_PORT,
                       iBaud_rate=BAUD_RATE, iTimeout=TIMEOUT)
         app.mainloop()
 
@@ -36,7 +36,7 @@ class mic_thread(threading.Thread):
     def run(self):
         mic_main()
  
-thread1 = main_thread("GUI", 1000)
+thread1 = app_thread("GUI", 1000)
 thread2 = mic_thread("Mic", 2000)
  
 thread1.start()

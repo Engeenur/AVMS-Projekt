@@ -12,8 +12,9 @@ from circular_buffer_numpy.circular_buffer import CircularBuffer
 import librosa as lr
 import soundcard as sc
 from pathlib import Path
-import subprocess as sp
-
+import threading
+from record_and_send import main as mic_main
+import os
 
 ###########################################################################################################################################################
 #------------------------------------------------------------------ GLOBAL VARIABLES ---------------------------------------------------------------------#
@@ -26,11 +27,33 @@ BORDER_WIDTH = 70  # number of pixels that are empty around the border of the ap
 # Arduino connection settings
 COM_PORT = 'COM3'
 BAUD_RATE = 115200
-TIMEOUT = 2e-5
+TIMEOUT = 0.01
 
 # Git settings and data
 REPOSITORY_PATH = 'C:\\Users\\Urban\\Documents\\Fakulteta za Elektrotehniko\\AVMS\\AVMS-Meritve'
 
+# threads classes
+# class app_thread(threading.Thread):
+#     def __init__(self, thread_name, thread_ID):
+#         threading.Thread.__init__(self)
+#         self.thread_name = thread_name
+#         self.thread_ID = thread_ID
+ 
+#         # helper function to execute the threads
+#     def run(self):
+#         self.app = Application(iApp_name=APP_NAME, iArduino_COM_port=COM_PORT,
+#                       iBaud_rate=BAUD_RATE, iTimeout=TIMEOUT)
+#         self.app.mainloop()
+
+# class mic_thread(threading.Thread):
+#     def __init__(self, thread_name, thread_ID):
+#         threading.Thread.__init__(self)
+#         self.thread_name = thread_name
+#         self.thread_ID = thread_ID
+ 
+#         # helper function to execute the threads
+#     def run(self):
+#         mic_main()
 
 class Arduino_SCD30():
     def __init__(self, iCom_port, iBaud_rate=115200, iTimeout=4):
@@ -75,26 +98,91 @@ class Arduino_SCD30():
     def change_sample_time(self):
         pass
 
-class Microphone():
+class Microphone(threading.Thread):
     # TODO: create a usable microphone class, that you can use to get microphone data
-    def __init__(self):
+    def __init__(self, event, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.stop_event = event
         self.data = []
         self.time_data = []
         self.t0 = time.time()
         self.microphones = sc.all_microphones()
         self.rec_mic = self.get_default_mic()
+        self.data_dir = 'C:\\Users\\Urban\\Documents\\Fakulteta za Elektrotehniko\\AVMS\\AVMS-Projekt\\Data'
+        self.file_num = 0
 
     def read_data(self):
-        self.data.append(0)
-        self.time_data.append(time.time()-self.t0)
+        # load data and analyze it
+        path = Path(self.data_dir+'/recorded_data_' + str(self.file_num) + '.npy')
+        if path.is_file():
+            mic_data = np.load(path, allow_pickle=True)
+            tempo = self.get_tempo(mic_data, sample_rate=44100)
+            self.data.append(tempo)
+            self.file_num += 1
 
     def get_default_mic(self):
         return self.microphones[0].name
-    
-    def start_measurement(self):
+
+    def stop(self):
         pass
-        #sp.call([r'C:\\Users\\Urban\\Documents\\Fakulteta za Elektrotehniko\\AVMS\\AVMS-Projekt\\Scripts\\run.bat'])
-        #print(sp.CalledProcessError.returncode)
+        
+    def get_tempo(self, buffer, sample_rate):
+        '''
+        Funkcija iz bufferja, v katerem je shranjen wav zvočni zapis, na podlagi sample ratea izračuna tempo
+        
+        Input:
+            buffer - wav sound buffer
+            sample_rate - sample rate of data in buffer
+            
+        Output:
+            tempo - tempo of data in buffer
+        '''
+        buffer = np.array(buffer, dtype='float64')
+        buffer_right = buffer[:,0]
+        buffer_left = buffer[:,1]
+        tempo_levo, beats = lr.beat.beat_track(y=buffer_left,sr=sample_rate)
+        tempo_desno, beats = lr.beat.beat_track(y=buffer_right,sr=sample_rate)
+        
+        tempo = (tempo_desno+tempo_levo)/2
+        
+        return tempo
+
+    def run(self):
+        samplerate = 44100
+        data_buffer = CircularBuffer(shape = (int(samplerate),2), dtype = 'float64')
+        # data_point = np.empty(shape = data_buffer.data_shape)
+        # recording_mic = sc.get_microphone('Focusrite Usb Audio')
+        recording_mic = sc.get_microphone('Realtek(R) Audio')
+        
+        test = os.listdir(self.data_dir)
+
+        for item in test:
+            if item.endswith(".npy"):
+                os.remove(os.path.join(self.data_dir, item))
+        
+        with recording_mic.recorder(samplerate=samplerate) as mic:
+            frame = 0
+            i = 0
+            file = 0
+            while(1):
+                data = mic.record(numframes=1)
+                data = np.squeeze(data)
+                data_buffer.append(data)
+
+                
+                if i == data_buffer.shape[0]:
+                    data = data_buffer.get_all()
+                    self.time_data.append(time.time()-self.t0)
+                    np.save(self.data_dir+'/recorded_data_' + str(file), data, allow_pickle=True)
+                    file += 1
+                    i = 0
+                    
+                i += 1
+
+                if self.stop_event.is_set():
+                    # stop the thread
+                    self.stop()
+                    break
 
 class Plotter():
     def __init__(self, iTkMaster, iFig_width=5, iFig_height=5, iSubplots_vertical=1, iSubplots_horizontal=1, iDpi=100):
@@ -146,10 +234,8 @@ class Plotter():
 
         self.canvas.draw()
 
-
 class Application():
     def __init__(self, iApp_name, iArduino_COM_port, iBaud_rate=115200, iTimeout=4):
-
         # create root and name it
         self.root = tk.Tk()
 
@@ -382,16 +468,17 @@ class Application():
                     x=(Window_width-BORDER_WIDTH-150), y=(y_subplot_idx*plot_h + BORDER_WIDTH + 192))
 
         ########################################################################################
-        # Measurement elements
-        self.SCD30 = Arduino_SCD30(
-            iCom_port=iArduino_COM_port, iBaud_rate=iBaud_rate, iTimeout=iTimeout)
-        self.Microphone = Microphone()
-
-        ########################################################################################
         # Running time variables (and dirty flags)
         self.running_measurement = False
         self.shutdown = False
         self.exported = True
+        self.stop_mic_recording = threading.Event()
+
+        ########################################################################################
+        # Measurement elements
+        self.SCD30 = Arduino_SCD30(
+            iCom_port=iArduino_COM_port, iBaud_rate=iBaud_rate, iTimeout=iTimeout)
+        self.Microphone = Microphone(self.stop_mic_recording)   
 
     def save_file_to_Github(self, file_path, commit_message=''):
         repo = Repo(REPOSITORY_PATH)
@@ -424,7 +511,10 @@ class Application():
         self.SCD30.timestamps = []
         self.Microphone.data = []
 
-        self.Microphone.start_measurement()
+        # reset stop mic event
+        self.stop_mic_recording.clear()
+        # start microphone recording
+        self.Microphone.start()
         # starting the serial connection if not open already
         if not self.SCD30.serial.is_open:
             self.state_log('Vzpostavljanje povezave s senzorjem SCD30')
@@ -441,6 +531,8 @@ class Application():
         # update visuals and functionality of buttons
         self.update_buttons('stop')
         self.state_log('Zaključek meritev')
+        # set the event for stopping microphone measurement
+        self.stop_mic_recording.set()
         # reset the dirty flag for running a measurement
         self.running_measurement = False
 
@@ -576,7 +668,6 @@ class Application():
 
             y_data = np.array(self.SCD30.data).astype('float')
             x_data = np.array(self.SCD30.time_data).astype('float').round(2)
-            # TODO: add microphone data for plotting
             mic_data = np.array(self.Microphone.data).astype('float')
             mic_time_data = np.array(self.Microphone.time_data).astype('float')
 
@@ -647,14 +738,14 @@ class Application():
                         # plot Microphone data
                         self.plotter.subplot_plot(mic_time_data, mic_data, iX_lower_limit=time0, iXscale=time_scale,
                                                   iY_offset=amp_offs, iYscale=amp_scale, iAutoScale=autoscale, iSampleTime=sample_time,
-                                                  iSubplot_num=i, iTitle='Microphone', iYlable='Microphone []')
+                                                  iSubplot_num=i, iTitle='Ritem', iYlable='Ritem [bpm]')
                         # change slider steps and edge values depending on what you are plotting
                         self.graph_amp_scale_sliders[i].configure(
                             from_=1, to=50, resolution=1)
                         self.graph_amp_scale_labels[i].configure(
-                            text='Amplitudna skala []')
+                            text='Amplitudna skala [bpm]')
                         self.graph_amp_offs_labels[i].configure(
-                            text='Amplitudni\npremik []')
+                            text='Amplitudni\npremik [bpm]')
 
             # print measurement result
             # TODO: apply the formula for the result
@@ -665,7 +756,6 @@ class Application():
 
 
 if __name__ == '__main__':
-
     app = Application(iApp_name=APP_NAME, iArduino_COM_port=COM_PORT,
                       iBaud_rate=BAUD_RATE, iTimeout=TIMEOUT)
     app.mainloop()
