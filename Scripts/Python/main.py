@@ -620,9 +620,9 @@ class Application():
             self.export_button.configure(state=tk.DISABLED)
             self.start_button.config(bg='#0be646', fg='white')
         elif button_pressed == 'stop':
-            # enable start and exit buttons and disable the stop button, also return start button to normal
+            # enable export and exit buttons and disable the stop button
             self.stop_button.configure(state=tk.DISABLED)
-            self.start_button.configure(state=tk.NORMAL)
+            self.start_button.configure(state=tk.DISABLED)
             self.exit_button.configure(state=tk.NORMAL)
             self.export_button.configure(state=tk.NORMAL)
             self.start_button.config(bg='green', fg='white')
