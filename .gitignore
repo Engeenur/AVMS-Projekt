@@ -1,1 +1,6 @@
 *.docx
+*.doc
+Porocilo_imgs
+Scripts/Python/img_color2gray.py
+Data
+.gitignore

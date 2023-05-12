@@ -8,6 +8,9 @@ import tkinter as tk
 import pandas as pd
 import datetime
 from git import Repo
+from pathlib import Path
+import librosa as lr
+import os
 
 
 ###########################################################################################################################################################
@@ -25,7 +28,6 @@ TIMEOUT = 2e-5
 
 # Git settings and data
 REPOSITORY_PATH = 'C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Meritve'
-
 
 class Arduino_SCD30():
     def __init__(self, iCom_port, iBaud_rate=115200, iTimeout=4):
@@ -54,15 +56,16 @@ class Arduino_SCD30():
         self.t0 = time.time()
 
     def read_data(self):
-        # read current data on the serial connection (from the arduino) and unpack it into the
-        # SCD30_data list
+        # read current data on the serial connection 
+        # (from the arduino) and unpack it
         line = self.serial.readline()   # read a byte string
         if line:
+            # record capture time and timestamp
             self.time_data.append(time.time()-self.t0)
             self.timestamps.append(datetime.datetime.now())
-            string = line.decode()  # convert the byte string to a unicode string
-            new_data = string.split()
-            self.data.append(new_data)
+            string = line.decode()  # convert to a unicode string
+            new_data = string.split() # split in 3 numbers
+            self.data.append(new_data) # log new data
 
     def close_serial(self):
         self.serial.close()
@@ -75,11 +78,80 @@ class Microphone():
     def __init__(self):
         self.data = []
         self.time_data = []
-        self.t0 = time.time()
+        self.timestamps = []
+        self.file_num = 0
+        self.mic_file_path = Path('C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Projekt\\Data\\Rec_mic_data\\recorded_data_' + str(self.file_num) + '.npy')
+        self.rec_data_path = 'C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Projekt\\Data\\Rec_mic_data'
+        self.t0 = 0
+        self.mic_controll_path = 'C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Projekt\\Data\\Mic_controll_data'
+        self.stop_path = Path(os.path.join(self.mic_controll_path,"STOP.txt"))
+        self.start_path = Path(os.path.join(self.mic_controll_path,"START.txt"))
 
+    def start(self):
+        # create start file for recording thread and remove stop file
+        open(os.path.join(self.mic_controll_path,"START.txt"), "w")
+        if self.stop_path.is_file():
+            os.remove(self.stop_path)
+        # intialize
+        self.data = []
+        self.time_data = []
+        self.timestamps = []
+        self.file_num = 0
+        self.mic_file_path = Path('C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Projekt\\Data\\Rec_mic_data\\recorded_data_' + str(self.file_num) + '.npy')
+
+    def get_tempo(self, buffer, sample_rate):
+        '''
+        Funkcija iz bufferja, v katerem je shranjen wav zvočni zapis, na podlagi sample ratea izračuna tempo
+        
+        Input:
+            buffer - wav sound buffer
+            sample_rate - sample rate of data in buffer
+            
+        Output:
+            tempo - tempo of data in buffer
+        '''
+        buffer = np.array(buffer, dtype='float64')
+        buffer_right = buffer[:,0]
+        buffer_left = buffer[:,1]
+        tempo_levo, beats = lr.beat.beat_track(y=buffer_left,sr=sample_rate)
+        tempo_desno, beats = lr.beat.beat_track(y=buffer_right,sr=sample_rate)
+        
+        tempo = (tempo_desno+tempo_levo)/2
+        
+        return tempo
+    
     def read_data(self):
-        self.data.append(0)
-        self.time_data.append(time.time()-self.t0)
+        if self.mic_file_path.is_file():
+            if self.file_num == 0:
+                # record starting time
+                self.t0 = self.mic_file_path.stat().st_mtime
+            time_created = self.mic_file_path.stat().st_mtime
+            self.time_data.append(time_created-self.t0)
+            self.timestamps.append(datetime.datetime.fromtimestamp(time_created))
+            data = np.load(self.mic_file_path, allow_pickle=True)
+            tempo = self.get_tempo(data, sample_rate=44100)
+            self.data.append(tempo)
+
+            #change path for next read and delete current file
+            os.remove(self.mic_file_path)
+            self.file_num += 1
+            self.mic_file_path = Path('C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Projekt\\Data\\Rec_mic_data\\recorded_data_' + str(self.file_num) + '.npy')
+
+    def stop(self):
+        # create stop file for recording thread and remove start file
+        open(os.path.join(self.mic_controll_path,"STOP.txt"), "x")
+        if self.start_path.is_file():
+            os.remove(self.start_path)
+        # reset file_num and path
+        self.file_num = 0
+        self.mic_file_path = Path('C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Projekt\\Data\\Rec_mic_data\\recorded_data_' + str(self.file_num) + '.npy')
+    
+    def exit(self):
+        # clear all leftover files
+        for item in os.listdir(self.rec_data_path):
+            if item.endswith(".npy"):
+                os.remove(os.path.join(self.rec_data_path, item))
+        os.remove(self.stop_path)
 
 class Plotter():
     def __init__(self, iTkMaster, iFig_width=5, iFig_height=5, iSubplots_vertical=1, iSubplots_horizontal=1, iDpi=100):
@@ -133,8 +205,9 @@ class Plotter():
 
 
 class Application():
-    def __init__(self, iApp_name, iArduino_COM_port, iBaud_rate=115200, iTimeout=4):
+    def __init__(self, iApp_name, iArduino_COM_port, iBaud_rate=115200, iTimeout=4, iGit_repository_path=REPOSITORY_PATH):
 
+        self.git_repo_path = iGit_repository_path
         # create root and name it
         self.root = tk.Tk()
 
@@ -379,7 +452,7 @@ class Application():
         self.exported = True
 
     def save_file_to_Github(self, file_path, commit_message=''):
-        repo = Repo(REPOSITORY_PATH)
+        repo = Repo(self.git_repo_path)
         #file_path = REPOSITORY_PATH + '\\' + relative_file_path
         repo.index.add(file_path)
         repo.index.commit(commit_message)
@@ -407,6 +480,7 @@ class Application():
         self.SCD30.data = []
         self.SCD30.time_data = []
         self.SCD30.timestamps = []
+        self.Microphone.start()
 
         # starting the serial connection if not open already
         if not self.SCD30.serial.is_open:
@@ -420,12 +494,14 @@ class Application():
         self.running_measurement = True
         self.exported = False
 
+
     def stop_measurement(self):
         # update visuals and functionality of buttons
         self.update_buttons('stop')
         self.state_log('Zaključek meritev')
         # reset the dirty flag for running a measurement
         self.running_measurement = False
+        self.Microphone.stop()
 
     def safe_exit(self):
         # check dirty flag for running a measurement
@@ -473,6 +549,7 @@ class Application():
         self.not_exported_popup.destroy()
 
     def exit_app(self):
+        self.Microphone.exit()
         self.root.after(1000, self.root.destroy)
         self.root.update()
         self.shutdown = True
@@ -559,7 +636,6 @@ class Application():
 
             y_data = np.array(self.SCD30.data).astype('float')
             x_data = np.array(self.SCD30.time_data).astype('float').round(2)
-            # TODO: add microphone data for plotting
             mic_data = np.array(self.Microphone.data).astype('float')
             mic_time_data = np.array(self.Microphone.time_data).astype('float')
 
@@ -626,18 +702,18 @@ class Application():
                             text='Amplitudna skala [%]')
                         self.graph_amp_offs_labels[i].configure(
                             text='Amplitudni\npremik [%]')
-                    elif self.graphs_data_to_plot[i].get() == self.graphs_data_to_plot_options[3]:
-                        # plot Microphone data
+                    elif (self.graphs_data_to_plot[i].get() == self.graphs_data_to_plot_options[3]) and mic_data:
+                        # plot Microphone data if there is any
                         self.plotter.subplot_plot(mic_time_data, mic_data, iX_lower_limit=time0, iXscale=time_scale,
                                                   iY_offset=amp_offs, iYscale=amp_scale, iAutoScale=autoscale, iSampleTime=sample_time,
-                                                  iSubplot_num=i, iTitle='Microphone', iYlable='Microphone []')
+                                                  iSubplot_num=i, iTitle='Tempo', iYlable='Tempo [bpm]')
                         # change slider steps and edge values depending on what you are plotting
                         self.graph_amp_scale_sliders[i].configure(
                             from_=1, to=50, resolution=1)
                         self.graph_amp_scale_labels[i].configure(
-                            text='Amplitudna skala []')
+                            text='Amplitudna skala [bpm]')
                         self.graph_amp_offs_labels[i].configure(
-                            text='Amplitudni\npremik []')
+                            text='Amplitudni\npremik [bpm]')
 
             # print measurement result
             # TODO: apply the formula for the result
