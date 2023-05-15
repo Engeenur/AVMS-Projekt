@@ -7,13 +7,13 @@ APP_NAME = 'AVMS - MERILEC USPEŠNOSTI KONCERTA'
 BORDER_WIDTH = 70  # number of pixels that are empty around the border of the app window to account for taskbar position
 
 # Arduino connection settings
-COM_PORT = 'COM5'
+COM_PORT = 'COM3'
 BAUD_RATE = 115200
 TIMEOUT = 2e-5
 
 # Git settings and data
-REPOSITORY_PATH = 'C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Meritve'
-MIC_DATA_PATH = 'C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Projekt\\Data'
+REPOSITORY_PATH = 'C:\\Users\\Urban\\Documents\\Fakulteta za Elektrotehniko\\AVMS\\AVMS-Meritve'
+MIC_DATA_PATH = 'C:\\Users\\Urban\\Documents\\Fakulteta za Elektrotehniko\\AVMS\\AVMS-Projekt\\Data'
 
 class rec_mic_thread(thr.Thread):
     def __init__(self, thread_name, thread_ID):
@@ -35,7 +35,8 @@ class app_thread(thr.Thread):
     def run(self):
         app = App(iApp_name=APP_NAME, iArduino_COM_port=COM_PORT,
                       iBaud_rate=BAUD_RATE, iTimeout=TIMEOUT, 
-                      iGit_repository_path=REPOSITORY_PATH)
+                      iGit_repository_path=REPOSITORY_PATH, 
+                      iMic_data_path=MIC_DATA_PATH)
         app.mainloop()
  
 app_thr = app_thread("GUI_thread", 1000)

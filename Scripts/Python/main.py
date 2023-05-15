@@ -11,6 +11,7 @@ from git import Repo
 from pathlib import Path
 import librosa as lr
 import os
+from scipy.signal import butter, filtfilt
 
 
 ###########################################################################################################################################################
@@ -22,12 +23,13 @@ APP_NAME = 'AVMS - MERILEC USPEŠNOSTI KONCERTA'
 BORDER_WIDTH = 70  # number of pixels that are empty around the border of the app window to account for taskbar position
 
 # Arduino connection settings
-COM_PORT = 'COM5'
+COM_PORT = 'COM3'
 BAUD_RATE = 115200
-TIMEOUT = 2e-5
+TIMEOUT = 0.01
 
 # Git settings and data
-REPOSITORY_PATH = 'C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Meritve'
+REPOSITORY_PATH = 'C:\\Users\\Urban\\Documents\\Fakulteta za Elektrotehniko\\AVMS\\AVMS-Meritve'
+MIC_DATA_PATH = 'C:\\Users\\Urban\\Documents\\Fakulteta za Elektrotehniko\\AVMS\\AVMS-Projekt\\Data'
 
 class Arduino_SCD30():
     def __init__(self, iCom_port, iBaud_rate=115200, iTimeout=4):
@@ -75,21 +77,21 @@ class Arduino_SCD30():
 
 class Microphone():
     # TODO: create a usable microphone class, that you can use to get microphone data
-    def __init__(self):
+    def __init__(self, iMic_data_path=MIC_DATA_PATH):
         self.data = []
         self.time_data = []
         self.timestamps = []
         self.file_num = 0
-        self.mic_file_path = Path('C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Projekt\\Data\\Rec_mic_data\\recorded_data_' + str(self.file_num) + '.npy')
-        self.rec_data_path = 'C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Projekt\\Data\\Rec_mic_data'
+        self.mic_file_path = Path(iMic_data_path+'\\Rec_mic_data\\recorded_data_' + str(self.file_num) + '.npy')
+        self.rec_data_path = iMic_data_path+'\\Rec_mic_data'
         self.t0 = 0
-        self.mic_controll_path = 'C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Projekt\\Data\\Mic_controll_data'
-        self.stop_path = Path(os.path.join(self.mic_controll_path,"STOP.txt"))
-        self.start_path = Path(os.path.join(self.mic_controll_path,"START.txt"))
+        self.mic_controll_path = iMic_data_path+'\\Mic_controll_data'
+        self.stop_path = Path(self.mic_controll_path+"\\STOP.txt")
+        self.start_path = Path(self.mic_controll_path+"\\START.txt")
 
     def start(self):
         # create start file for recording thread and remove stop file
-        open(os.path.join(self.mic_controll_path,"START.txt"), "w")
+        open(self.start_path, "w")
         if self.stop_path.is_file():
             os.remove(self.stop_path)
         # intialize
@@ -97,7 +99,7 @@ class Microphone():
         self.time_data = []
         self.timestamps = []
         self.file_num = 0
-        self.mic_file_path = Path('C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Projekt\\Data\\Rec_mic_data\\recorded_data_' + str(self.file_num) + '.npy')
+        self.mic_file_path = Path(self.rec_data_path + '\\recorded_data_' + str(self.file_num) + '.npy')
 
     def get_tempo(self, buffer, sample_rate):
         '''
@@ -120,6 +122,12 @@ class Microphone():
         
         return tempo
     
+    def butter_lowpass_filter(data, cutoff, fs, order):
+        normal_cutoff = cutoff/(0.5*fs)
+        b, a = butter(order, normal_cutoff, btype='low', analog=False)
+        y = filtfilt(b,a,data)
+        return y
+
     def read_data(self):
         if self.mic_file_path.is_file():
             if self.file_num == 0:
@@ -129,29 +137,42 @@ class Microphone():
             self.time_data.append(time_created-self.t0)
             self.timestamps.append(datetime.datetime.fromtimestamp(time_created))
             data = np.load(self.mic_file_path, allow_pickle=True)
-            tempo = self.get_tempo(data, sample_rate=44100)
+            if np.max(np.abs(data)) > 0.1:
+                # breakpoint()
+                # data_l = self.butter_lowpass_filter(data=data[:,0], cutoff=10000, fs=44100, order=2)
+                # data_r = self.butter_lowpass_filter(data[:,1], 10000, 44100, 2)
+                
+                # data_s = np.array([data_l, data_r])
+                # data_s = np.transpose(data_s)
+                
+                # tempo = self.get_tempo(data_s, sample_rate=44100)
+                tempo = self.get_tempo(data, sample_rate=44100)
+            else:
+                tempo = 0
+            #tempo = self.get_tempo(data, sample_rate=44100)
             self.data.append(tempo)
 
             #change path for next read and delete current file
             os.remove(self.mic_file_path)
             self.file_num += 1
-            self.mic_file_path = Path('C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Projekt\\Data\\Rec_mic_data\\recorded_data_' + str(self.file_num) + '.npy')
+            self.mic_file_path = Path(self.rec_data_path + '\\recorded_data_' + str(self.file_num) + '.npy')
 
     def stop(self):
         # create stop file for recording thread and remove start file
-        open(os.path.join(self.mic_controll_path,"STOP.txt"), "x")
+        open(self.stop_path, "w")
         if self.start_path.is_file():
             os.remove(self.start_path)
         # reset file_num and path
         self.file_num = 0
-        self.mic_file_path = Path('C:\\Users\\Urban\\Documents\\Fakulteta za elektrotehniko\\BMA 2. Semester\\Avtomatizirani_In_Virtualni_Merilni_Sistemi\\AVMS Projekt\\Data\\Rec_mic_data\\recorded_data_' + str(self.file_num) + '.npy')
-    
+        self.mic_file_path = Path(self.rec_data_path + '\\recorded_data_' + str(self.file_num) + '.npy')
+
     def exit(self):
         # clear all leftover files
         for item in os.listdir(self.rec_data_path):
             if item.endswith(".npy"):
                 os.remove(os.path.join(self.rec_data_path, item))
-        os.remove(self.stop_path)
+        if self.stop_path.is_file():
+            os.remove(self.stop_path)
 
 class Plotter():
     def __init__(self, iTkMaster, iFig_width=5, iFig_height=5, iSubplots_vertical=1, iSubplots_horizontal=1, iDpi=100):
@@ -205,7 +226,7 @@ class Plotter():
 
 
 class Application():
-    def __init__(self, iApp_name, iArduino_COM_port, iBaud_rate=115200, iTimeout=4, iGit_repository_path=REPOSITORY_PATH):
+    def __init__(self, iApp_name, iArduino_COM_port, iGit_repository_path, iMic_data_path, iBaud_rate=115200, iTimeout=4):
 
         self.git_repo_path = iGit_repository_path
         # create root and name it
@@ -443,7 +464,7 @@ class Application():
         # Measurement elements
         self.SCD30 = Arduino_SCD30(
             iCom_port=iArduino_COM_port, iBaud_rate=iBaud_rate, iTimeout=iTimeout)
-        self.Microphone = Microphone()
+        self.Microphone = Microphone(iMic_data_path=iMic_data_path)
 
         ########################################################################################
         # Running time variables (and dirty flags)
@@ -591,13 +612,23 @@ class Application():
         time_data = np.array(self.SCD30.timestamps)
         time_data = np.reshape(time_data, (time_data.size, 1))
         data_DF = pd.DataFrame(np.hstack((time_data, sensory_data)))
+        mic_time_data = np.array(self.Microphone.timestamps)
+        mic_time_data = np.reshape(mic_time_data, (mic_time_data.size, 1))
+        mic_data = np.array(self.Microphone.data)
+        mic_data = np.reshape(mic_data, (mic_data.size, 1))
+        mic_data_DF = pd.DataFrame(np.hstack((mic_time_data, mic_data)))
         try:
             # save data locally to a csv
-            data_DF.to_csv(filepath, header=['time stamp [date h:m:s]', 'CO2 concentration [ppm]', 'Temperature [°C]', 'Relative humidity [%]'],
+            data_DF.to_csv(filepath+'_SCD30', header=['time stamp [date h:m:s]', 'CO2 concentration [ppm]', 'Temperature [°C]', 'Relative humidity [%]'],
                            index=False)
-            commit_message = 'meritve dne: ' + \
+            commit_message = 'SCD30 meritve dne: ' + \
                 str(datetime.datetime.now().date())
-            self.save_file_to_Github(filepath, commit_message=commit_message)
+            self.save_file_to_Github(filepath+'_SCD30', commit_message=commit_message)
+            mic_data_DF.to_csv(filepath+'_Microphone', header=['time stamp [date h:m:s]', 'Beat'],
+                           index=False)
+            commit_message = 'Tempo meritve dne: ' + \
+                str(datetime.datetime.now().date())
+            self.save_file_to_Github(filepath+'_Microphone', commit_message=commit_message)
             # set the dirty flag for data being exported
             self.exported = True
         except OSError:
@@ -702,7 +733,7 @@ class Application():
                             text='Amplitudna skala [%]')
                         self.graph_amp_offs_labels[i].configure(
                             text='Amplitudni\npremik [%]')
-                    elif (self.graphs_data_to_plot[i].get() == self.graphs_data_to_plot_options[3]) and mic_data:
+                    elif (self.graphs_data_to_plot[i].get() == self.graphs_data_to_plot_options[3]) and (mic_data.size>0):
                         # plot Microphone data if there is any
                         self.plotter.subplot_plot(mic_time_data, mic_data, iX_lower_limit=time0, iXscale=time_scale,
                                                   iY_offset=amp_offs, iYscale=amp_scale, iAutoScale=autoscale, iSampleTime=sample_time,
@@ -726,5 +757,7 @@ class Application():
 if __name__ == '__main__':
 
     app = Application(iApp_name=APP_NAME, iArduino_COM_port=COM_PORT,
-                      iBaud_rate=BAUD_RATE, iTimeout=TIMEOUT)
+                      iBaud_rate=BAUD_RATE, iTimeout=TIMEOUT, 
+                      iGit_repository_path=REPOSITORY_PATH, 
+                      iMic_data_path=MIC_DATA_PATH)
     app.mainloop()
