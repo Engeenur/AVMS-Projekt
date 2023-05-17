@@ -122,7 +122,12 @@ class Microphone():
         
         return tempo
     
-    def butter_lowpass_filter(data, cutoff, fs, order):
+    def get_tempo_mono(self, buffer, sample_rate):
+        buffer = np.array(buffer, dtype='float64')
+        tempo, beats = lr.beat.beat_track(y=buffer,sr=sample_rate)
+        return tempo
+
+    def butter_lowpass_filter(self, data, cutoff, fs, order):
         normal_cutoff = cutoff/(0.5*fs)
         b, a = butter(order, normal_cutoff, btype='low', analog=False)
         y = filtfilt(b,a,data)
@@ -139,14 +144,18 @@ class Microphone():
             data = np.load(self.mic_file_path, allow_pickle=True)
             if np.max(np.abs(data)) > 0.1:
                 # breakpoint()
-                # data_l = self.butter_lowpass_filter(data=data[:,0], cutoff=10000, fs=44100, order=2)
-                # data_r = self.butter_lowpass_filter(data[:,1], 10000, 44100, 2)
+                # TEMPO:
+                data_r = self.butter_lowpass_filter(data[:,1], 10000, 44100, 2)
+                data_l = self.butter_lowpass_filter(data[:,0], 10000, 44100, 2)
                 
-                # data_s = np.array([data_l, data_r])
-                # data_s = np.transpose(data_s)
+                data_s = np.array([data_l, data_r])
+                data_s = np.transpose(data_s)
                 
-                # tempo = self.get_tempo(data_s, sample_rate=44100)
-                tempo = self.get_tempo(data, sample_rate=44100)
+                tempo = self.get_tempo(data_s, sample_rate=44100)
+                # MONO TEMPO TEST:
+                # print(data)
+                # data = self.butter_lowpass_filter(data[:,0], 10000, 44100, 2)
+                # tempo = self.get_tempo_mono(data, sample_rate=44100)
             else:
                 tempo = 0
             #tempo = self.get_tempo(data, sample_rate=44100)
@@ -193,7 +202,7 @@ class Plotter():
         self.canvas.get_tk_widget().pack()
         self.canvas.get_tk_widget().place(x=(iFig_width/22), y=-(iFig_height)*0.06)
 
-    def subplot_plot(self, iX, iY, iSampleTime=1.5, iAutoScale=1, iY_offset=0, iYscale=100, iX_lower_limit=0, iXscale=100, iTitle='', iMarker='b-', iSubplot_num=0, iXlabel='', iYlable=''):
+    def subplot_plot(self, iX, iY, iSampleTime=1.5, iAutoScale=1, iY_offset=0, iYscale=100, iX_lower_limit=0, iXscale=100, iTitle='', iMarker='b-', iSubplot_num=0, iXlabel='Čas [s]', iYlable=''):
         iX = np.array(iX)
         iY = np.array(iY)
 
@@ -201,7 +210,7 @@ class Plotter():
         self.subplots[iSubplot_num].set_title(iTitle)
         self.subplots[iSubplot_num].title.set_size(13)
         self.subplots[iSubplot_num].grid()
-        self.subplots[iSubplot_num].set_xlabel(iXlabel)
+        self.subplots[iSubplot_num].set_xlabel(iXlabel, fontsize=9, loc='right')
         self.subplots[iSubplot_num].set_xlim(
             iX_lower_limit, iX_lower_limit+iXscale)
         self.subplots[iSubplot_num].set_ylabel(iYlable)
@@ -247,7 +256,6 @@ class Application():
 
         ########################################################################################
         # GUI elements
-
         self.plot_height = (Window_height*7/8/2)
         self.plot_width = (Window_width*10/11/2)
         # create plot canvas and place it on the specified position
@@ -288,11 +296,11 @@ class Application():
                                  8*2 + 20), y=Window_height-(BORDER_WIDTH + Button_height*10))
 
         # make time label at the bottom of the graphs
-        self.time_label = tk.Label(self.main_frame, text='Čas [s]',
-                                   justify=tk.CENTER)
-        self.time_label.pack()
-        self.time_label.place(
-            x=Window_width/2, y=Window_height-self.plot_height*2/7-self.plot_height*0.22)
+        # self.time_label = tk.Label(self.main_frame, text='Čas [s]',
+        #                            justify=tk.CENTER)
+        # self.time_label.pack()
+        # self.time_label.place(
+        #     x=Window_width/2, y=Window_height-self.plot_height*2/7-self.plot_height*0.22)
 
         # current state logger (disabled entry so it's still a box, but can't be written in)
         self.state_logger = tk.Entry(
@@ -313,7 +321,7 @@ class Application():
             x=Window_width-BORDER_WIDTH-153, y=Window_height-150)
         self.result_display.config(state=tk.DISABLED)
         self.result_display_label = tk.Label(
-            self.main_frame, text='Rezultat meritve:', font='Arial 15')
+            self.main_frame, text='Uspešnost:', font='Arial 15')
         self.result_display_label.pack()
         self.result_display_label.place(
             x=Window_width-BORDER_WIDTH-153, y=Window_height-180)
@@ -515,7 +523,6 @@ class Application():
         self.running_measurement = True
         self.exported = False
 
-
     def stop_measurement(self):
         # update visuals and functionality of buttons
         self.update_buttons('stop')
@@ -619,16 +626,18 @@ class Application():
         mic_data_DF = pd.DataFrame(np.hstack((mic_time_data, mic_data)))
         try:
             # save data locally to a csv
-            data_DF.to_csv(filepath+'_SCD30', header=['time stamp [date h:m:s]', 'CO2 concentration [ppm]', 'Temperature [°C]', 'Relative humidity [%]'],
+            os.mkdir(filepath)
+            data_DF.to_csv(filepath+'\\SCD30', header=['time stamp [date h:m:s]', 'CO2 concentration [ppm]', 'Temperature [°C]', 'Relative humidity [%]'],
                            index=False)
-            commit_message = 'SCD30 meritve dne: ' + \
-                str(datetime.datetime.now().date())
-            self.save_file_to_Github(filepath+'_SCD30', commit_message=commit_message)
-            mic_data_DF.to_csv(filepath+'_Microphone', header=['time stamp [date h:m:s]', 'Beat'],
+            mic_data_DF.to_csv(filepath+'\\Microphone', header=['time stamp [date h:m:s]', 'Beat'],
                            index=False)
-            commit_message = 'Tempo meritve dne: ' + \
+            print('open write file')
+            f = open(filepath+'\\Result.txt', "w")
+            print('start writing in file')
+            f.write(str(self.result))
+            commit_message = 'Meritve dne: ' + \
                 str(datetime.datetime.now().date())
-            self.save_file_to_Github(filepath+'_Microphone', commit_message=commit_message)
+            self.save_file_to_Github(filepath, commit_message=commit_message)
             # set the dirty flag for data being exported
             self.exported = True
         except OSError:
@@ -669,6 +678,8 @@ class Application():
             x_data = np.array(self.SCD30.time_data).astype('float').round(2)
             mic_data = np.array(self.Microphone.data).astype('float')
             mic_time_data = np.array(self.Microphone.time_data).astype('float')
+
+            self.result = 'Ni podatkov'
 
             # plot the last NUM_OF_SAMPLES readings
             if x_data.size > 1:
@@ -745,12 +756,19 @@ class Application():
                             text='Amplitudna skala [bpm]')
                         self.graph_amp_offs_labels[i].configure(
                             text='Amplitudni\npremik [bpm]')
+                        
+                    CO2_0 = y_data[0,0]
+                    T_0 = y_data[0,1]
+                    H_0 = y_data[0,2]
+                    d_CO2 = y_data[-1,0]-y_data[0,0]
+                    d_T = y_data[-1,1]-y_data[0,1]
+                    d_H = y_data[-1,2]-y_data[0,2]
+                    
+                    res_f = np.round(300*(d_T/T_0 + d_CO2/CO2_0 + d_H/H_0),3)
+                    self.result = str(res_f)
 
-            # print measurement result
-            # TODO: apply the formula for the result
-            self.result = 'TODO eq.'
+            # print measurement result            
             self.result_log(self.result)
-
             self.root.update()
 
 
